@@ -1,0 +1,31 @@
+{
+  "video_source": "car-fire-2.mp4",
+  "display": true,
+  "output_path": null,
+  "device": null,
+  "resize_width": 960,
+  "alert_cooldown_seconds": 15,
+  "webhook_url": null,
+  "include_snapshot_in_webhook": false,
+  "yolo": {
+    "enabled": false,
+    "model_path": "models/crash_yolov8.pt",
+    "confidence": 0.45,
+    "iou": 0.5,
+    "image_size": 640,
+    "crash_classes": ["accident", "crash", "vehicle_crash", "damaged_vehicle"]
+  },
+  "tensorflow_fire": {
+    "enabled": false,
+    "model_path": "models/fire_classifier",
+    "threshold": 0.7,
+    "input_size": [224, 224],
+    "class_names": ["no_fire", "fire"]
+  },
+  "hsv_fire_fallback": {
+    "enabled": true,
+    "lower_hsv": [0, 70, 50],
+    "upper_hsv": [18, 255, 255],
+    "min_area": 12000
+  }
+}
