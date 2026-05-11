@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Detection System - Real-time Video Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .fire-gradient {
+            background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+        }
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .detection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .upload-zone {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .upload-zone:hover {
+            border-color: #667eea;
+            background-color: #f7fafc;
+        }
+        .upload-zone.dragover {
+            border-color: #667eea;
+            background-color: #edf2f7;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i data-lucide="flame" class="w-8 h-8"></i>
+                    <h1 class="text-2xl font-bold">Fire Detection System</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm opacity-90">Real-time Video Analysis</span>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-400 rounded-full pulse"></div>
+                        <span class="text-sm">System Active</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Left Panel - Controls -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Upload Section -->
+                <section class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="upload" class="w-5 h-5 mr-2"></i>
+                        Upload Video
+                    </h2>
+                    <div id="uploadZone" class="upload-zone rounded-lg p-8 text-center cursor-pointer">
+                        <i data-lucide="video" class="w-12 h-12 mx-auto mb-4 text-gray-400"></i>
+                        <p class="text-gray-600 mb-2">Drop video file here or click to browse</p>
+                        <p class="text-sm text-gray-500">MP4, AVI, MOV (Max 100MB)</p>
+                        <input type="file" id="videoInput" accept="video/*" class="hidden">
+                    </div>
+                    <div id="uploadProgress" class="hidden mt-4">
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <p id="progressText" class="text-sm text-gray-600 mt-2">Uploading...</p>
+                    </div>
+                </section>
+
+                <!-- Preloaded Videos -->
+                <section class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="folder-open" class="w-5 h-5 mr-2"></i>
+                        Sample Videos
+                    </h2>
+                    <div class="space-y-3">
+                        {% for video in preloaded_videos %}
+                        <div class="border rounded-lg p-3 hover:bg-gray-50 transition-colors cursor-pointer preloaded-video" 
+                             data-filename="{{ video.filename }}">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-16 h-12 bg-gray-200 rounded flex items-center justify-center">
+                                        <i data-lucide="play" class="w-6 h-6 text-gray-500"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-medium text-sm">{{ video.name }}</h3>
+                                        <p class="text-xs text-gray-500">{{ video.description }}</p>
+                                    </div>
+                                </div>
+                                <i data-lucide="chevron-right" class="w-4 h-4 text-gray-400"></i>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <!-- Live Webcam -->
+                <section class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="camera" class="w-5 h-5 mr-2"></i>
+                        Live Webcam
+                    </h2>
+                    <button id="webcamBtn" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                        <i data-lucide="video" class="w-5 h-5 mr-2"></i>
+                        Start Live Detection
+                    </button>
+                    <div id="webcamStatus" class="mt-3 text-sm text-gray-600 hidden">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span>Webcam active</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Panel - Video Display -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Video Player -->
+                <section class="bg-white rounded-xl shadow-md p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-semibold flex items-center">
+                            <i data-lucide="monitor" class="w-5 h-5 mr-2"></i>
+                            Video Analysis
+                        </h2>
+                        <div id="processingStatus" class="hidden flex items-center space-x-2">
+                            <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="text-sm text-gray-600">Processing...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="video-container aspect-video bg-gray-900 rounded-lg overflow-hidden">
+                        <video id="videoPlayer" class="w-full h-full" controls>
+                            <source src="" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="detection-overlay" id="detectionOverlay"></div>
+                    </div>
+
+                    <!-- Video Controls -->
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex space-x-2">
+                            <button id="playBtn" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition-colors">
+                                <i data-lucide="play" class="w-5 h-5"></i>
+                            </button>
+                            <button id="pauseBtn" class="bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors">
+                                <i data-lucide="pause" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button id="downloadBtn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors flex items-center">
+                                <i data-lucide="download" class="w-4 h-4 mr-2"></i>
+                                Download Result
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Detection Results -->
+                <section class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 mr-2 text-orange-500"></i>
+                        Detection Results
+                    </h2>
+                    
+                    <div id="detectionResults" class="space-y-3">
+                        <div class="text-center py-8 text-gray-500">
+                            <i data-lucide="search" class="w-12 h-12 mx-auto mb-3 text-gray-300"></i>
+                            <p>No video loaded yet</p>
+                            <p class="text-sm">Upload a video or select a sample to begin analysis</p>
+                        </div>
+                    </div>
+
+                    <!-- Statistics -->
+                    <div id="detectionStats" class="mt-6 grid grid-cols-3 gap-4 hidden">
+                        <div class="text-center p-4 bg-red-50 rounded-lg">
+                            <div class="text-2xl font-bold text-red-600" id="fireCount">0</div>
+                            <div class="text-sm text-gray-600">Fire Detections</div>
+                        </div>
+                        <div class="text-center p-4 bg-blue-50 rounded-lg">
+                            <div class="text-2xl font-bold text-blue-600" id="confidenceAvg">0%</div>
+                            <div class="text-sm text-gray-600">Avg Confidence</div>
+                        </div>
+                        <div class="text-center p-4 bg-green-50 rounded-lg">
+                            <div class="text-2xl font-bold text-green-600" id="processTime">0s</div>
+                            <div class="text-sm text-gray-600">Process Time</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-4 flex items-center space-x-3 min-w-[300px]">
+            <div id="toastIcon"></div>
+            <div>
+                <p id="toastMessage" class="text-sm font-medium"></p>
+                <p id="toastDescription" class="text-xs text-gray-500"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Global variables
+        let currentVideo = null;
+        let processedVideo = null;
+        let statusInterval = null;
+
+        // Toast notification system
+        function showToast(message, description = '', type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastDescription = document.getElementById('toastDescription');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMessage.textContent = message;
+            toastDescription.textContent = description;
+
+            // Set icon based on type
+            const iconMap = {
+                'success': '<i data-lucide="check-circle" class="w-5 h-5 text-green-500"></i>',
+                'error': '<i data-lucide="x-circle" class="w-5 h-5 text-red-500"></i>',
+                'warning': '<i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-500"></i>',
+                'info': '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>'
+            };
+            toastIcon.innerHTML = iconMap[type] || iconMap['info'];
+            lucide.createIcons();
+
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 5000);
+        }
+
+        // File upload handling
+        const uploadZone = document.getElementById('uploadZone');
+        const videoInput = document.getElementById('videoInput');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+
+        uploadZone.addEventListener('click', () => videoInput.click());
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+
+        videoInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+
+        async function handleFileUpload(file) {
+            if (!file.type.startsWith('video/')) {
+                showToast('Invalid file type', 'Please upload a video file', 'error');
+                return;
+            }
+
+            if (file.size > 100 * 1024 * 1024) {
+                showToast('File too large', 'Maximum file size is 100MB', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('video', file);
+
+            uploadProgress.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            progressText.textContent = 'Uploading...';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    progressBar.style.width = '100%';
+                    progressText.textContent = 'Upload complete!';
+                    
+                    currentVideo = result.filename;
+                    showToast('Upload successful', 'Video uploaded successfully', 'success');
+                    
+                    // Start processing
+                    setTimeout(() => {
+                        processVideo(result.filename);
+                    }, 1000);
+                } else {
+                    showToast('Upload failed', result.error, 'error');
+                }
+            } catch (error) {
+                showToast('Upload error', 'Failed to upload video', 'error');
+            }
+
+            setTimeout(() => {
+                uploadProgress.classList.add('hidden');
+            }, 2000);
+        }
+
+        // Preloaded video handling
+        document.querySelectorAll('.preloaded-video').forEach(element => {
+            element.addEventListener('click', () => {
+                const filename = element.dataset.filename;
+                processPreloadedVideo(filename);
+            });
+        });
+
+        async function processPreloadedVideo(filename) {
+            try {
+                const response = await fetch(`/process_preloaded/${filename}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    currentVideo = filename;
+                    showToast('Processing started', 'Analyzing video for fire detection', 'info');
+                    startStatusMonitoring();
+                } else {
+                    showToast('Processing failed', result.error, 'error');
+                }
+            } catch (error) {
+                showToast('Processing error', 'Failed to start processing', 'error');
+            }
+        }
+
+        async function processVideo(filename) {
+            try {
+                const response = await fetch(`/process/${filename}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('Processing started', 'Analyzing video for fire detection', 'info');
+                    startStatusMonitoring();
+                } else {
+                    showToast('Processing failed', result.error, 'error');
+                }
+            } catch (error) {
+                showToast('Processing error', 'Failed to start processing', 'error');
+            }
+        }
+
+        // Status monitoring
+        function startStatusMonitoring() {
+            const processingStatus = document.getElementById('processingStatus');
+            processingStatus.classList.remove('hidden');
+
+            statusInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/status');
+                    const status = await response.json();
+
+                    console.log('Processing status:', status); // Debug logging
+
+                    if (!status.is_processing) {
+                        clearInterval(statusInterval);
+                        processingStatus.classList.add('hidden');
+                        
+                        if (status.error) {
+                            showToast('Processing failed', status.error, 'error');
+                        } else if (status.result && status.result.success) {
+                            processedVideo = status.output_filename || status.result.output_filename;
+                            console.log('Loading processed video:', processedVideo); // Debug logging
+                            loadProcessedVideo(processedVideo);
+                            displayDetectionResults(status.result.detections);
+                            showToast('Processing complete', 'Fire detection analysis finished', 'success');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Status check failed:', error);
+                }
+            }, 2000);
+        }
+
+        function loadProcessedVideo(filename) {
+            const videoPlayer = document.getElementById('videoPlayer');
+            const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            
+            // Chrome-specific video loading
+            if (isChrome) {
+                // For Chrome, try multiple sources and codecs
+                videoPlayer.innerHTML = `
+                    <source src="/video/${filename}" type="video/mp4; codecs=avc1.42E01E">
+                    <source src="/video/${filename}" type="video/mp4; codecs=avc1.58A01E">
+                    <source src="/video/${filename}" type="video/mp4">
+                `;
+            } else {
+                videoPlayer.src = `/video/${filename}`;
+            }
+            
+            videoPlayer.style.display = 'block';
+            videoPlayer.load();
+            
+            // Clear any webcam overlay
+            document.getElementById('detectionOverlay').innerHTML = '';
+            
+            // Add video event listeners for debugging
+            videoPlayer.onerror = function() {
+                console.error('Video loading error:', videoPlayer.error);
+                if (isChrome) {
+                    showToast('Chrome Video Error', 'Trying alternative loading method...', 'warning');
+                    // Chrome-specific retry with different approach
+                    setTimeout(() => {
+                        videoPlayer.src = `/video/${filename}?t=${Date.now()}`;
+                        videoPlayer.load();
+                    }, 1000);
+                } else {
+                    showToast('Video Error', 'Failed to load processed video. Retrying...', 'error');
+                    setTimeout(() => {
+                        videoPlayer.src = `/video/${filename}?t=${Date.now()}`;
+                        videoPlayer.load();
+                    }, 2000);
+                }
+            };
+            
+            videoPlayer.onloadeddata = function() {
+                console.log('Video loaded successfully');
+                showToast('Video Ready', 'Processed video loaded successfully', 'success');
+            };
+            
+            videoPlayer.oncanplay = function() {
+                console.log('Video can play');
+            };
+        }
+
+        function displayDetectionResults(detections) {
+            const resultsContainer = document.getElementById('detectionResults');
+            const statsContainer = document.getElementById('detectionStats');
+            
+            if (detections.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i data-lucide="shield-check" class="w-12 h-12 mx-auto mb-3 text-gray-300"></i>
+                        <p>No fire detected</p>
+                        <p class="text-sm">The video appears to be safe</p>
+                    </div>
+                `;
+                statsContainer.classList.add('hidden');
+            } else {
+                // Display recent detections
+                const recentDetections = detections.slice(-10).reverse();
+                resultsContainer.innerHTML = recentDetections.map(detection => `
+                    <div class="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center">
+                                <i data-lucide="flame" class="w-5 h-5 text-white"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-sm">Fire Detected</p>
+                                <p class="text-xs text-gray-500">Time: ${detection.timestamp.toFixed(2)}s</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-red-600">${(detection.confidence * 100).toFixed(1)}%</p>
+                            <p class="text-xs text-gray-500">Confidence</p>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Update statistics
+                const fireCount = detections.length;
+                const avgConfidence = detections.reduce((sum, d) => sum + d.confidence, 0) / detections.length;
+                
+                document.getElementById('fireCount').textContent = fireCount;
+                document.getElementById('confidenceAvg').textContent = `${(avgConfidence * 100).toFixed(1)}%`;
+                document.getElementById('processTime').textContent = '5s'; // Placeholder
+                
+                statsContainer.classList.remove('hidden');
+            }
+            
+            lucide.createIcons();
+        }
+
+        // Video controls
+        document.getElementById('playBtn').addEventListener('click', () => {
+            const videoPlayer = document.getElementById('videoPlayer');
+            videoPlayer.play();
+        });
+
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            const videoPlayer = document.getElementById('videoPlayer');
+            videoPlayer.pause();
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (processedVideo) {
+                // Create a temporary link element for download
+                const link = document.createElement('a');
+                link.href = `/download/${processedVideo}`;
+                link.download = processedVideo;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('Download Started', 'Downloading processed video...', 'success');
+            } else {
+                showToast('No processed video', 'Process a video first to download results', 'warning');
+            }
+        });
+
+        // Webcam functionality with WebSocket
+        let socket = null;
+        let isWebcamActive = false;
+
+        function initializeSocket() {
+            socket = io();
+            
+            socket.on('connect', () => {
+                console.log('Connected to server');
+            });
+            
+            socket.on('webcam_frame', (data) => {
+                updateWebcamFeed(data.frame, data.detections);
+            });
+            
+            socket.on('fire_alert', (data) => {
+                handleFireAlert(data.detections);
+            });
+            
+            socket.on('webcam_error', (data) => {
+                showToast('Webcam Error', data.error, 'error');
+                stopWebcam();
+            });
+            
+            socket.on('webcam_started', (data) => {
+                showToast('Webcam Active', 'Live fire detection started', 'success');
+            });
+            
+            socket.on('webcam_stopped', (data) => {
+                showToast('Webcam Stopped', 'Live detection ended', 'info');
+            });
+        }
+
+        document.getElementById('webcamBtn').addEventListener('click', () => {
+            if (!isWebcamActive) {
+                startWebcam();
+            } else {
+                stopWebcam();
+            }
+        });
+
+        function startWebcam() {
+            if (!socket) {
+                initializeSocket();
+            }
+            
+            const videoPlayer = document.getElementById('videoPlayer');
+            const webcamBtn = document.getElementById('webcamBtn');
+            const webcamStatus = document.getElementById('webcamStatus');
+            
+            // Switch to webcam mode
+            videoPlayer.style.display = 'none';
+            document.getElementById('detectionOverlay').innerHTML = `
+                <img id="webcamFeed" class="w-full h-full object-cover" style="display: block;">
+            `;
+            
+            webcamBtn.innerHTML = '<i data-lucide="square" class="w-5 h-5 mr-2"></i>Stop Live Detection';
+            webcamBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+            webcamBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+            
+            webcamStatus.classList.remove('hidden');
+            
+            // Start webcam on server
+            socket.emit('start_webcam');
+            isWebcamActive = true;
+            
+            lucide.createIcons();
+        }
+
+        function stopWebcam() {
+            if (socket) {
+                socket.emit('stop_webcam');
+            }
+            
+            const videoPlayer = document.getElementById('videoPlayer');
+            const webcamBtn = document.getElementById('webcamBtn');
+            const webcamStatus = document.getElementById('webcamStatus');
+            
+            // Restore video player
+            videoPlayer.style.display = 'block';
+            document.getElementById('detectionOverlay').innerHTML = '';
+            
+            webcamBtn.innerHTML = '<i data-lucide="video" class="w-5 h-5 mr-2"></i>Start Live Detection';
+            webcamBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
+            webcamBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+            
+            webcamStatus.classList.add('hidden');
+            
+            isWebcamActive = false;
+            
+            lucide.createIcons();
+        }
+
+        function updateWebcamFeed(frameData, detections) {
+            const webcamFeed = document.getElementById('webcamFeed');
+            if (webcamFeed) {
+                webcamFeed.src = 'data:image/jpeg;base64,' + frameData;
+            }
+            
+            // Update live detection results
+            if (detections.length > 0) {
+                updateLiveDetections(detections);
+            }
+        }
+
+        function handleFireAlert(detections) {
+            // Show alert for fire detection
+            const confidence = detections.reduce((sum, d) => sum + d.confidence, 0) / detections.length;
+            showToast('Fire Detected!', `${detections.length} fire(s) detected with ${(confidence * 100).toFixed(1)}% confidence`, 'warning');
+        }
+
+        function updateLiveDetections(detections) {
+            const resultsContainer = document.getElementById('detectionResults');
+            
+            if (isWebcamActive) {
+                const latestDetection = detections[detections.length - 1];
+                resultsContainer.innerHTML = `
+                    <div class="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center pulse">
+                                <i data-lucide="flame" class="w-5 h-5 text-white"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-sm">Live Fire Detection</p>
+                                <p class="text-xs text-gray-500">Real-time analysis</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-red-600">${(latestDetection.confidence * 100).toFixed(1)}%</p>
+                            <p class="text-xs text-gray-500">Confidence</p>
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
