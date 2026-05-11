@@ -155,19 +155,6 @@ python Fd.py
 
 It uses HSV color masking and Gmail SMTP alerts. For real deployments, move credentials out of source code and into environment variables or a local `.env` file.
 
-## Model Training Notes
-
-To support the resume-style production claim, train and evaluate custom models before publishing metrics:
-
-- Collect and annotate a balanced fire/crash dataset.
-- Train a YOLOv8 crash detector with custom crash labels.
-- Train or fine-tune a TensorFlow fire classifier.
-- Apply data augmentation for lighting, smoke, night scenes, camera blur, and occlusion.
-- Tune confidence and NMS thresholds on a validation set.
-- Benchmark mAP, false-positive rate, and inference latency on the target device, such as NVIDIA Jetson Nano.
-
-Only report numbers like `95% mAP`, `2,000-image dataset`, or `sub-80ms latency` after those experiments are reproducible.
-
 ## Notes
 
 - The included videos are demo assets for validating the pipeline.
