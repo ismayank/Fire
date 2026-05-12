@@ -4,5 +4,10 @@ __pycache__/
 models/
 runs/
 outputs/
+uploads/
 *.avi
 *.mov
+test*.html
+chrome_test.html
+debug_video.html
+test_video.html
