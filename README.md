@@ -2,6 +2,47 @@
 
 A real-time computer vision pipeline for detecting fire and vehicle crash events from video streams. The project includes the original OpenCV fire detector plus an upgraded configurable pipeline with YOLOv8 crash detection, TensorFlow fire classification, HSV fire fallback detection, annotated video output, and REST webhook alerts.
 
+## Quick Start
+
+### Clone and Run
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/ismayank/Fire.git
+   cd Fire
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run the application:**
+   ```bash
+   python3 run.py
+   ```
+
+4. **Open your browser and navigate to:**
+   ```
+   http://localhost:5001
+   ```
+
+### System Requirements
+
+- Python 3.8 or higher
+- pip package manager
+- Webcam (for real-time detection)
+- Modern web browser
+
+### Dependencies
+
+The application automatically installs all required dependencies:
+- OpenCV (Computer Vision)
+- Flask (Web Framework)
+- TensorFlow/Keras (Machine Learning)
+- YOLOv8 (Object Detection)
+- NumPy (Numerical Computing)
+
 ## Demo
 
 | Car fire detection | Bike fire detection | Building fire detection |
