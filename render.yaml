@@ -1,0 +1,40 @@
+services:
+  # Web Service
+  - type: web
+    name: fire-detection
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python run.py"
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 5001
+      - key: PYTHON_VERSION
+        value: 3.12.0
+    
+  # Static File Service (for video files and assets)
+  - type: web
+    name: fire-detection-static
+    env: static
+    plan: free
+    buildCommand: "mkdir -p static uploads outputs"
+    staticPublishPath: .
+    headers:
+      - path: "/*.mp4"
+        name: "Content-Type"
+        value: "video/mp4"
+      - path: "/*.jpg"
+        name: "Content-Type"
+        value: "image/jpeg"
+      - path: "/*.png"
+        name: "Content-Type"
+        value: "image/png"
+
+# Auto-deploy configuration
+version: "1"
+
+# Build settings
+build:
+  - pip install --upgrade pip
+  - pip install -r requirements.txt
